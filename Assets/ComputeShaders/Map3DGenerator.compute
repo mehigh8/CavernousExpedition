@@ -1,0 +1,37 @@
+#pragma kernel CSMain
+
+RWStructuredBuffer<int> map2d;
+RWStructuredBuffer<float> floorNoise;
+RWStructuredBuffer<float> ceilingNoise;
+int2 mapSize;
+
+RWTexture3D<float> map3d;
+int height;
+
+float3 worldSize;
+
+float noiseCeilingHeight;
+float noiseFloorHeight;
+
+[numthreads(8,8,8)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= mapSize.x || id.y >= height || id.z >= mapSize.y)
+        return;
+    
+    if (id.y == 0 || id.y == height - 1)
+    {
+        map3d[id] = -1;
+    }
+    else if (map2d[id.x * mapSize.y + id.z] == 1)
+    {
+        if (id.y < height / 2)
+            map3d[id] = id.y - floorNoise[id.x * mapSize.y + id.z] * noiseFloorHeight;
+        else
+            map3d[id] = height - (ceilingNoise[id.x * mapSize.y + id.z] * noiseCeilingHeight) - id.y;
+    }
+    else
+    {
+        map3d[id] = -1;
+    }
+}

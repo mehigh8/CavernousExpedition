@@ -1,0 +1,21 @@
+#pragma kernel CSMain
+#define INSIDE float4(1.0, 1.0, 1.0, 1.0)
+#define OUTSIDE float4(0.0, 0.0, 0.0, 1.0)
+#define PLAYER float4(1.0, 0.0, 0.0, 1.0)
+
+RWTexture2D<float4> minimapTexture;
+
+RWStructuredBuffer<int> map;
+RWStructuredBuffer<int> seen;
+int2 mapSize;
+float2 player;
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint2 id2d = uint2(id.x, id.y);
+    if (distance(player, float2(id.x, id.y)) < 1)
+        minimapTexture[id2d] = PLAYER;
+    else
+        minimapTexture[id2d] = (map[id.x * mapSize.y + id.y] == 1 && seen[id.x * mapSize.y + id.y] == 1) ? INSIDE : OUTSIDE;
+}

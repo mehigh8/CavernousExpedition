@@ -1,0 +1,102 @@
+#pragma kernel CSMain
+#include "MarchTables.compute"
+
+struct Vertex
+{
+    float3 position;
+    float3 normal;
+};
+
+struct Triangle
+{
+    Vertex a;
+    Vertex b;
+    Vertex c;
+};
+
+AppendStructuredBuffer<Triangle> triangles;
+RWTexture3D<float> mapTexture;
+int2 mapSize;
+int height;
+
+float3 worldSize;
+
+float3 calculateWorldPos(int3 unscaledPos)
+{
+    return float3((unscaledPos.x / float(mapSize.x) - 0.5) * float(worldSize.x),
+                  (unscaledPos.y / float(height) - 0.5) * float(worldSize.y),
+                  (unscaledPos.z / float(mapSize.y) - 0.5) * float(worldSize.z));
+}
+
+float3 calculateNormal(Vertex a, Vertex b, Vertex c)
+{
+    return normalize(cross(b.position - a.position, c.position - a.position));
+}
+
+float3 createVertex(int3 edgeStart, int3 edgeEnd)
+{
+    float3 edgeStartWorldPos = calculateWorldPos(edgeStart);
+    float3 edgeEndWorldPos = calculateWorldPos(edgeEnd);
+    
+    return (edgeStartWorldPos + edgeEndWorldPos) * 0.5;
+}
+
+[numthreads(8,8,8)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= mapSize.x - 1 || id.y >= height - 1 || id.z >= mapSize.y - 1)
+        return;
+    
+    // Calculate current cube configuration by checking each corner's value in the mapTexture
+    uint cubeConfig = 0;
+    int i;
+    
+    for (i = 0; i < 8; i++)
+    {
+        if (mapTexture[id + int3(corners[i][0], corners[i][1], corners[i][2])] < 0)
+            cubeConfig |= (1 << i);
+    }
+
+    // Create vertices (only those that are relevant)
+    for (i = 0; i < 16; i += 3)
+    {
+        if (triangulation[cubeConfig][i] == -1)
+            break;
+        
+        Vertex vertexA;
+        Vertex vertexB;
+        Vertex vertexC;
+        
+        int vertexAStart = cornerStartFromEdge[triangulation[cubeConfig][i]];
+        int vertexAEnd = cornerEndFromEdge[triangulation[cubeConfig][i]];
+        
+        vertexA.position = createVertex(id + int3(corners[vertexAStart][0], corners[vertexAStart][1], corners[vertexAStart][2]),
+                                      id + int3(corners[vertexAEnd][0], corners[vertexAEnd][1], corners[vertexAEnd][2]));
+        
+        int vertexBStart = cornerStartFromEdge[triangulation[cubeConfig][i+1]];
+        int vertexBEnd = cornerEndFromEdge[triangulation[cubeConfig][i+1]];
+        
+        vertexB.position = createVertex(id + int3(corners[vertexBStart][0], corners[vertexBStart][1], corners[vertexBStart][2]),
+                                      id + int3(corners[vertexBEnd][0], corners[vertexBEnd][1], corners[vertexBEnd][2]));
+        
+        int vertexCStart = cornerStartFromEdge[triangulation[cubeConfig][i+2]];
+        int vertexCEnd = cornerEndFromEdge[triangulation[cubeConfig][i+2]];
+        
+        vertexC.position = createVertex(id + int3(corners[vertexCStart][0], corners[vertexCStart][1], corners[vertexCStart][2]),
+                                      id + int3(corners[vertexCEnd][0], corners[vertexCEnd][1], corners[vertexCEnd][2]));
+        
+        float3 normal = calculateNormal(vertexA, vertexB, vertexC);
+        
+        vertexA.normal = normal;
+        vertexB.normal = normal;
+        vertexC.normal = normal;
+        
+        Triangle tri;
+        tri.a = vertexA;
+        tri.b = vertexB;
+        tri.c = vertexC;
+
+        triangles.Append(tri);
+    }
+
+}

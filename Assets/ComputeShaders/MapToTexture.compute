@@ -1,0 +1,20 @@
+#pragma kernel CSMain
+
+RWTexture2D<float4> tex;
+RWStructuredBuffer<int> map;
+int2 mapSize;
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= mapSize.x || id.y >= mapSize.y)
+        return;
+    
+    uint2 id2d = uint2(id.x, id.y);
+    
+    float val = map[id.x * mapSize.y + id.y];
+    if (val < 0.0)
+        val = 0.0;
+    
+    tex[id2d] = float4(val, val, val, val);
+}
